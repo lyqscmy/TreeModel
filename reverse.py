@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from TreeModel import XGBModel
 
 with open('model.bin', 'rb') as f:

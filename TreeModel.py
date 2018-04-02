@@ -2,7 +2,7 @@ from struct import unpack, calcsize
 import logging
 
 logging.basicConfig(format='%(message)s', filename='log1',
-                    filemode='w', level=logging.DEBUG)
+                    filemode='w', level=logging.INFO)
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 
@@ -93,14 +93,19 @@ class XGBTreeNode(object):
         self.parent = parent
         self.cleft = cleft
         self.cright = cright
-        self.split_index = split_index & ((1 << 31) - 1)
+        self._split_index = split_index
         if is_leaf:
             self.leaf_value = leaf_value_or_split_cond
         else:
             self.split_cond = leaf_value_or_split_cond
 
+    def split_index(self):
+        return self._split_index & ((1 << 31) - 1)
+
     def cdefault(self):
-        if (self.split_index >> 31) != 0:
+        default_left = (self._split_index >> 31) != 0
+        logging.info("default_left:{}".format(default_left))
+        if default_left:
             return self.cleft
         else:
             return self.cright
@@ -136,19 +141,30 @@ class XGBTree(object):
 
     def get_leaf_index(self, feat):
         nid = 0  # root_id
+        logging.info("root_id:{}".format(nid))
         while not self.nodes[nid].is_leaf:
             nid = self.get_next(nid, feat)
         return nid
 
     def get_next(self, nid, feat):
-        split_index = self.nodes[nid].split_index
+        split_index = self.nodes[nid].split_index()
+        logging.info("split_index:{}".format(split_index))
         if feat.is_missing(split_index):
-            return self.nodes[nid].cdefault()
+            logging.info("missing")
+            nid = self.nodes[nid].cdefault()
+            # logging.info("cdefault:{}".format(nid))
         else:
-            if feat.fvalue(split_index) < self.nodes[nid].split_cond:
-                return self.nodes[nid].cleft
+            fvalue = feat.fvalue(split_index) 
+            split_cond = self.nodes[nid].split_cond 
+            logging.info("fvalue:{:.6f}".format(fvalue))
+            logging.info("split_cond:{:.6f}".format(split_cond))
+            if  fvalue < split_cond:
+                nid = self.nodes[nid].cleft
+                logging.info("cleft:{}".format(nid))
             else:
-                return self.nodes[nid].cright
+                nid = self.nodes[nid].cright
+                logging.info("cright:{}".format(nid))
+        return nid
 
     @staticmethod
     def load(buffer):
